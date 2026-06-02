@@ -1,0 +1,89 @@
+x-superset-image: &superset-image superset-custom:latest
+x-superset-build: &superset-build
+  context: .
+  dockerfile: docker/Dockerfile
+
+x-superset-depends-on: &superset-depends-on
+  - db
+  - redis
+  - trino
+x-superset-volumes: &superset-volumes
+  - ./docker:/app/docker
+  - superset_home:/app/superset_home
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: superset_cache
+    restart: unless-stopped
+    volumes:
+      - redis:/data
+
+  db:
+    env_file: docker/.env
+    image: postgres:15-alpine
+    container_name: superset_db
+    restart: unless-stopped
+    volumes:
+      - db_home:/var/lib/postgresql/data
+
+  trino:
+    image: trinodb/trino:latest
+    container_name: superset_trino
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./docker/trino/etc:/etc/trino
+
+  superset:
+    build: *superset-build
+    env_file: docker/.env
+    image: *superset-image
+    container_name: superset_app
+    command: ["/app/docker/docker-bootstrap.sh", "app-gunicorn"]
+    restart: unless-stopped
+    ports:
+      - "8088:8088"
+    depends_on: *superset-depends-on
+    volumes: *superset-volumes
+
+  superset-init:
+    build: *superset-build
+    image: *superset-image
+    container_name: superset_init
+    command: ["/app/docker/docker-init.sh"]
+    env_file: docker/.env
+    depends_on: *superset-depends-on
+    volumes: *superset-volumes
+    healthcheck:
+      disable: true
+
+  superset-worker:
+    build: *superset-build
+    image: *superset-image
+    container_name: superset_worker
+    command: ["/app/docker/docker-bootstrap.sh", "worker"]
+    env_file: docker/.env
+    restart: unless-stopped
+    depends_on: *superset-depends-on
+    volumes: *superset-volumes
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A superset.tasks.celery_app:app inspect ping -d celery@$$HOSTNAME"]
+
+  superset-worker-beat:
+    build: *superset-build
+    image: *superset-image
+    container_name: superset_worker_beat
+    command: ["/app/docker/docker-bootstrap.sh", "beat"]
+    env_file: docker/.env
+    restart: unless-stopped
+    depends_on: *superset-depends-on
+    volumes: *superset-volumes
+    healthcheck:
+      disable: true
+
+volumes:
+  superset_home:
+  db_home:
+  redis:
