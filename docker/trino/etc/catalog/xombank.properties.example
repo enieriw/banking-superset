@@ -1,0 +1,4 @@
+connector.name=sqlserver
+connection-url=jdbc:sqlserver://db.xomdata.com:1433;databaseName=xomdata_dataset;encrypt=true;trustServerCertificate=true
+connection-user=<your-user>
+connection-password=<your-password>
